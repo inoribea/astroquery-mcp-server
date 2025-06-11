@@ -6,6 +6,8 @@ Astroquery-CLI MCP Server
 
 import asyncio
 import json
+import os # Added import for os module
+import shutil # Added import for shutil module
 import subprocess
 import sys
 from typing import Any, Dict, List, Optional
@@ -24,31 +26,38 @@ class AstroqueryMCPServer:
         self._setup_handlers()
         
     def _find_astroquery_cli(self) -> str:
-        """查找astroquery-cli可执行文件路径"""
-        # 尝试几个可能的路径
-        possible_paths = [
-            "astroquery-cli",  # 如果在PATH中
-            "./astroquery-cli",  # 当前目录
-            str(Path.home() / ".local/bin/astroquery-cli"),  # 用户本地安装
-        ]
+        """查找aqc可执行文件路径"""
+        # 尝试使用 shutil.which 来查找可执行文件
+        aqc_path = shutil.which("aqc")
         
-        for path in possible_paths:
+        if aqc_path:
             try:
-                result = subprocess.run([path, "--help"], 
-                                      capture_output=True, text=True, timeout=5)
+                # 验证找到的路径是否确实是可执行文件
+                result = subprocess.run([aqc_path, "--help"], 
+                                      capture_output=True, text=True, timeout=5, env=os.environ)
                 if result.returncode == 0:
-                    return path
+                    return aqc_path
             except (subprocess.TimeoutExpired, FileNotFoundError):
-                continue
+                pass # 如果找到的路径不可用，继续抛出错误
                 
-        raise RuntimeError("Cannot find astroquery-cli executable")
+        # 如果 shutil.which 找不到，或者找到的路径不可用，则尝试硬编码路径
+        hardcoded_path = str(Path.home() / ".local/bin/aqc")
+        try:
+            result = subprocess.run([hardcoded_path, "--help"], 
+                                  capture_output=True, text=True, timeout=5, env=os.environ)
+            if result.returncode == 0:
+                return hardcoded_path
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+                
+        raise RuntimeError(f"Cannot find aqc executable. Tried PATH and {hardcoded_path}")
     
     def _get_available_commands(self) -> Dict[str, Dict]:
-        """动态获取所有可用的astroquery-cli命令和子命令"""
+        """动态获取所有可用的aqc命令和子命令"""
         try:
-            # 获取主要命令列表
+            # 明确传递 env=os.environ 来继承当前进程的PATH
             result = subprocess.run([self.astroquery_cli_path, "--help"], 
-                                  capture_output=True, text=True, timeout=10)
+                                  capture_output=True, text=True, timeout=10, env=os.environ)
             
             commands = {}
             
@@ -82,8 +91,9 @@ class AstroqueryMCPServer:
     def _get_subcommands(self, command: str) -> Dict[str, str]:
         """获取特定命令的子命令"""
         try:
+            # 明确传递 env=os.environ 来继承当前进程的PATH
             result = subprocess.run([self.astroquery_cli_path, command, "--help"], 
-                                  capture_output=True, text=True, timeout=10)
+                                  capture_output=True, text=True, timeout=10, env=os.environ)
             
             subcommands = {}
             lines = result.stdout.split('\n')
@@ -120,7 +130,7 @@ class AstroqueryMCPServer:
             for cmd, cmd_info in commands.items():
                 tools.append(Tool(
                     name=f"astroquery_{cmd}",
-                    description=f"Execute astroquery-cli {cmd} command: {cmd_info['description']}",
+                    description=f"Execute aqc {cmd} command: {cmd_info['description']}",
                     inputSchema={
                         "type": "object",
                         "properties": {
@@ -147,13 +157,13 @@ class AstroqueryMCPServer:
             # 添加一个通用执行工具
             tools.append(Tool(
                 name="astroquery_execute",
-                description="Execute any astroquery-cli command with full control",
+                description="Execute any aqc command with full control",
                 inputSchema={
                     "type": "object",
                     "properties": {
                         "command": {
                             "type": "string",
-                            "description": "Full command to execute (without 'astroquery-cli' prefix)"
+                            "description": "Full command to execute (without 'aqc' prefix)"
                         },
                         "timeout": {
                             "type": "number",
@@ -203,7 +213,8 @@ class AstroqueryMCPServer:
             result = await asyncio.create_subprocess_exec(
                 *full_command,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
+                env=os.environ # 明确传递环境变量
             )
             
             stdout, stderr = await asyncio.wait_for(result.communicate(), timeout=timeout)
@@ -251,7 +262,8 @@ class AstroqueryMCPServer:
             result = await asyncio.create_subprocess_exec(
                 *command_parts,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
+                env=os.environ # 明确传递环境变量
             )
             
             stdout, stderr = await asyncio.wait_for(result.communicate(), timeout=30)

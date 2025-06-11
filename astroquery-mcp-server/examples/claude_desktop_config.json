@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "astroquery": {
+      "command": "python",
+      "args": ["-m", "astroquery_mcp"],
+      "env": {
+        "PATH": "/usr/local/bin:/usr/bin:/bin"
+      }
+    }
+  }
+}
