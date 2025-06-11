@@ -27,7 +27,7 @@ pip install astroquery-mcp-server
 
 #### From Source
 ```bash
-git clone https://github.com/yourusername/astroquery-mcp-server.git
+git clone https://github.com/inoribea/astroquery-mcp-server.git
 cd astroquery-mcp-server
 pip install -e .
 ```
